@@ -1,0 +1,61 @@
+# Safi Hospital HMS — Docker application stack (API + Web).
+# PostgreSQL runs on an external/native server (NOT in this compose file).
+#
+# Usage:
+#   cp .env.example .env   # set DB_HOST, DB_PORT, credentials, access-role passwords
+#   docker compose build
+#   docker compose up -d
+#
+# DATA SAFETY: Do not run `docker compose down -v` on environments with data you need to keep.
+
+services:
+  hms-api:
+    build:
+      context: ../hms-api
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OFBIZ_POSTGRES_HOST: ${OFBIZ_POSTGRES_HOST:-${DB_HOST:-host.docker.internal}}
+      OFBIZ_POSTGRES_PORT: ${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}
+      OFBIZ_POSTGRES_JDBC_PARAMS: ${OFBIZ_POSTGRES_JDBC_PARAMS:-}
+      OFBIZ_POSTGRES_OFBIZ_DB: ${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}
+      OFBIZ_POSTGRES_OFBIZ_USER: ${OFBIZ_POSTGRES_OFBIZ_USER:-${DB_USER:-hms_app}}
+      OFBIZ_POSTGRES_OFBIZ_PASSWORD: ${OFBIZ_POSTGRES_OFBIZ_PASSWORD:-${DB_PASSWORD}}
+      OFBIZ_POSTGRES_OLAP_DB: ${OFBIZ_POSTGRES_OLAP_DB:-${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}}
+      OFBIZ_POSTGRES_OLAP_USER: ${OFBIZ_POSTGRES_OLAP_USER:-${OFBIZ_POSTGRES_OFBIZ_USER:-${DB_USER:-hms_app}}}
+      OFBIZ_POSTGRES_OLAP_PASSWORD: ${OFBIZ_POSTGRES_OLAP_PASSWORD:-${OFBIZ_POSTGRES_OFBIZ_PASSWORD:-${DB_PASSWORD}}}
+      OFBIZ_POSTGRES_TENANT_DB: ${OFBIZ_POSTGRES_TENANT_DB:-${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}}
+      OFBIZ_POSTGRES_TENANT_USER: ${OFBIZ_POSTGRES_TENANT_USER:-${OFBIZ_POSTGRES_OFBIZ_USER:-${DB_USER:-hms_app}}}
+      OFBIZ_POSTGRES_TENANT_PASSWORD: ${OFBIZ_POSTGRES_TENANT_PASSWORD:-${OFBIZ_POSTGRES_OFBIZ_PASSWORD:-${DB_PASSWORD}}}
+      OFBIZ_DATA_LOAD: ${OFBIZ_DATA_LOAD:-none}
+      OFBIZ_SKIP_INIT: ${OFBIZ_SKIP_INIT:-}
+      HMS_TENANT_ID: ${HMS_TENANT_ID:-hms}
+      HMS_APPOINTMENT_TIMEZONE: ${HMS_APPOINTMENT_TIMEZONE:-Asia/Karachi}
+      SUBSCRIPTION_DAYS: ${SUBSCRIPTION_DAYS:-0}
+      SUBSCRIPTION_START_DATE: ${SUBSCRIPTION_START_DATE:-}
+    volumes:
+      - hms_api_runtime:/ofbiz/runtime
+    ports:
+      - "${HMS_API_PORT:-8080}:80"
+
+  hms-web:
+    build:
+      context: ../hms-web
+      dockerfile: docker/Dockerfile
+      args:
+        VITE_API_MODE: live
+        VITE_HMS_TENANT_ID: ${VITE_HMS_TENANT_ID:-hms}
+        VITE_HMS_BUSINESS_TIMEZONE: ${VITE_HMS_BUSINESS_TIMEZONE:-Asia/Karachi}
+    restart: unless-stopped
+    depends_on:
+      - hms-api
+    environment:
+      HMS_WEB_API_UPSTREAM: http://hms-api:80
+    ports:
+      - "${HMS_WEB_PORT:-8088}:80"
+
+volumes:
+  hms_api_runtime:
