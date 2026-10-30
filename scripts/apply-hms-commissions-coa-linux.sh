@@ -14,6 +14,7 @@ set -euo pipefail
 COMPOSE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/.." && pwd)"
 MIGRATION_SQL="$REPO_ROOT/hms-api/applications/hms/data/migrations/20261029-hms-commissions-payable-type-default.sql"
+HOTFIX_SQL="$COMPOSE_DIR/postgres/external/hms-commissions-payable-hotfix.sql"
 
 cd "$COMPOSE_DIR"
 
@@ -36,7 +37,7 @@ PGUSER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 
 ofbiz_load() {
   echo ">>> OFBiz load: $*"
-  docker compose exec -T hms-api /ofbiz/bin/ofbiz --load-data "$@"
+  docker compose exec -T hms-api /ofbiz/bin/ofbiz --load-data delegator=default "$@"
 }
 
 psql_q() {
@@ -82,12 +83,18 @@ if [[ "$HAS_210002" == "0" || "$ORG_210002" == "0" ]]; then
   fi
 fi
 
-if [[ ! -f "$MIGRATION_SQL" ]]; then
-  echo "WARN: migration SQL not found at $MIGRATION_SQL — skip SQL step" >&2
+SQL_FILE=""
+if [[ -f "$MIGRATION_SQL" ]]; then
+  SQL_FILE="$MIGRATION_SQL"
+elif [[ -f "$HOTFIX_SQL" ]]; then
+  SQL_FILE="$HOTFIX_SQL"
+fi
+if [[ -z "$SQL_FILE" ]]; then
+  echo "WARN: no commissions SQL found — skip SQL step" >&2
 else
-  echo ">>> Applying gl_account_type_default migration..."
+  echo ">>> Applying gl_account_type_default ($SQL_FILE)..."
   PGPASSWORD="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}" \
-    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$MIGRATION_SQL"
+    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$SQL_FILE"
 fi
 
 echo ">>> Verification:"
