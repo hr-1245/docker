@@ -47,13 +47,29 @@ fi
 PGUSER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 
 ofbiz_load() {
-  echo ">>> OFBiz load: $*"
-  docker_compose exec -T hms-api /ofbiz/bin/ofbiz --load-data delegator=default "$@"
+  echo ">>> OFBiz load: $* (may take several minutes; wait for process to exit)"
+  docker_compose exec -T hms-api /ofbiz/bin/ofbiz \
+    --load-data delegator=default \
+    --load-data "$@"
+}
+
+# Prefer password auth; on local Postgres fall back to `sudo -u postgres` (peer auth on unix socket).
+psql_admin() {
+  local admin_pass="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}"
+  if [[ -n "$admin_pass" ]]; then
+    PGPASSWORD="$admin_pass" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"
+    return $?
+  fi
+  if [[ "$PGHOST" == "localhost" || "$PGHOST" == "127.0.0.1" ]] && command -v sudo >/dev/null; then
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"
+    return $?
+  fi
+  echo "ERROR: Set NATIVE_POSTGRES_ADMIN_PASSWORD in docker/.env, or run SQL as: sudo -u postgres psql -d $DB_NAME ..." >&2
+  return 1
 }
 
 psql_q() {
-  PGPASSWORD="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}" \
-    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -Atqc "$1"
+  psql_admin -Atqc "$1"
 }
 
 echo "=== HMS commissions / COA fix ==="
@@ -108,12 +124,11 @@ if [[ -z "$SQL_FILE" ]]; then
   echo "WARN: no commissions SQL found — skip SQL step" >&2
 else
   echo ">>> Applying gl_account_type_default ($SQL_FILE)..."
-  PGPASSWORD="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}" \
-    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$SQL_FILE"
+  psql_admin -f "$SQL_FILE"
 fi
 
 echo ">>> Verification:"
-psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$DB_NAME" <<EOF
+psql_admin <<EOF
 SELECT gl_account_id, gl_account_type_id, account_name
   FROM gl_account
  WHERE gl_account_id IN ('210002', '221100')
