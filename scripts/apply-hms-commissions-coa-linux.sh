@@ -8,10 +8,15 @@
 #   ./scripts/apply-hms-commissions-coa-linux.sh
 #
 # Requires: running hms-api container, psql client, postgres superuser (or role that can read/write hms_db).
+# Docker: auto-uses `sudo docker compose` when plain `docker` is root-only (common on Linux servers).
 
 set -euo pipefail
 
-COMPOSE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/docker-compose.sh
+source "$SCRIPT_DIR/lib/docker-compose.sh"
+
+COMPOSE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/.." && pwd)"
 MIGRATION_SQL="$REPO_ROOT/hms-api/applications/hms/data/migrations/20261029-hms-commissions-payable-type-default.sql"
 HOTFIX_SQL="$COMPOSE_DIR/postgres/external/hms-commissions-payable-hotfix.sql"
@@ -43,7 +48,7 @@ PGUSER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 
 ofbiz_load() {
   echo ">>> OFBiz load: $*"
-  docker compose exec -T hms-api /ofbiz/bin/ofbiz --load-data delegator=default "$@"
+  docker_compose exec -T hms-api /ofbiz/bin/ofbiz --load-data delegator=default "$@"
 }
 
 psql_q() {
@@ -56,10 +61,11 @@ echo "Database: $DB_NAME | API JDBC host: $API_JDBC_HOST | host psql: $PGHOST:$P
 if [[ "$API_JDBC_HOST" == "host.docker.internal" && "${NATIVE_POSTGRES_HOST:-localhost}" != "localhost" ]]; then
   echo "NOTE: Container reaches Postgres via host-gateway; host psql uses NATIVE_POSTGRES_HOST=$PGHOST."
 fi
-echo "Container: $(docker compose ps -q hms-api 2>/dev/null || echo 'hms-api not running')"
+echo "Docker: $DOCKER_COMPOSE_BIN"
+echo "Container: $(docker_compose ps -q hms-api 2>/dev/null || echo 'hms-api not running')"
 
-if ! docker compose ps hms-api 2>/dev/null | grep -q 'Up'; then
-  echo "ERROR: hms-api container is not up. Run: docker compose up -d hms-api" >&2
+if ! hms_api_container_up; then
+  echo "ERROR: hms-api container is not up. Run: $DOCKER_COMPOSE_BIN up -d hms-api" >&2
   exit 1
 fi
 

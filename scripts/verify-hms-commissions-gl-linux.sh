@@ -4,7 +4,11 @@
 
 set -euo pipefail
 
-COMPOSE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/docker-compose.sh
+source "$SCRIPT_DIR/lib/docker-compose.sh"
+
+COMPOSE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$COMPOSE_DIR"
 
 if [[ -f .env ]]; then
@@ -32,6 +36,7 @@ ADMIN_USER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 ADMIN_PASS="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}"
 
 echo "=== COMMISSIONS_PAYABLE diagnostics ==="
+echo "Docker: $DOCKER_COMPOSE_BIN"
 echo "API JDBC: $DB_NAME @ $API_PGHOST:$PGPORT (user: $APP_USER)"
 echo "Host psql: $DB_NAME @ $HOST_PGHOST:$HOST_PGPORT (same DB when API uses host.docker.internal)"
 if [[ "$API_PGHOST" != "host.docker.internal" && "$NATIVE_PGHOST" != "$API_PGHOST" ]]; then
@@ -84,8 +89,8 @@ fi
 
 echo ""
 echo "--- 3) JDBC database the running container actually uses ---"
-if docker compose ps hms-api 2>/dev/null | grep -q 'Up'; then
-  docker compose exec -T hms-api sh -c '
+if hms_api_container_up; then
+  docker_compose exec -T hms-api sh -c '
     for f in /ofbiz/config/entityengine.xml /ofbiz/framework/entity/config/entityengine.xml; do
       if [ -f "$f" ]; then
         echo "entityengine: $f"
@@ -101,8 +106,8 @@ fi
 
 echo ""
 echo "--- 4) Deployed API includes GL resolver fix? ---"
-if docker compose ps hms-api 2>/dev/null | grep -q 'Up'; then
-  RESOLVER_FOUND="$(docker compose exec -T hms-api sh -c '
+if hms_api_container_up; then
+  RESOLVER_FOUND="$(docker_compose exec -T hms-api sh -c '
     if grep -rq "resolveCommissionsPayableGlAccountId" /ofbiz/applications/hms 2>/dev/null; then
       echo YES_SOURCE
       exit 0
