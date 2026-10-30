@@ -20,6 +20,9 @@ COMPOSE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/.." && pwd)"
 MIGRATION_SQL="$REPO_ROOT/hms-api/applications/hms/data/migrations/20261029-hms-commissions-payable-type-default.sql"
 HOTFIX_SQL="$COMPOSE_DIR/postgres/external/hms-commissions-payable-hotfix.sql"
+# --load-data file= must be a path UtilURL can resolve (not component://).
+OFBIZ_DEMO_GL="file=/ofbiz/applications/datamodel/data/demo/GlAccountDemoData.xml"
+OFBIZ_HMS_COA="file=/ofbiz/applications/hms/data/HmsCoaSeedData.xml"
 
 cd "$COMPOSE_DIR"
 
@@ -82,6 +85,7 @@ echo "Container: $(docker_compose ps -q hms-api 2>/dev/null || echo 'hms-api not
 
 if ! hms_api_container_up; then
   echo "ERROR: hms-api container is not up. Run: $DOCKER_COMPOSE_BIN up -d hms-api" >&2
+  echo "If the stack was started with sudo, try: export DOCKER_COMPOSE_CMD='sudo docker compose'" >&2
   exit 1
 fi
 
@@ -91,7 +95,7 @@ echo "gl_account rows: $GL_COUNT | gl_account 210002: $HAS_210002"
 
 if [[ "$GL_COUNT" == "0" ]]; then
   echo ">>> Empty chart: loading demo GL skeleton (GlAccountDemoData.xml)..."
-  ofbiz_load "file=component://datamodel/data/demo/GlAccountDemoData.xml"
+  ofbiz_load "$OFBIZ_DEMO_GL"
   GL_COUNT="$(psql_q "SELECT COUNT(*) FROM gl_account;")"
   echo "gl_account rows after demo load: $GL_COUNT"
   if [[ "$GL_COUNT" == "0" ]]; then
@@ -104,7 +108,7 @@ HAS_210002="$(psql_q "SELECT COUNT(*) FROM gl_account WHERE gl_account_id = '210
 ORG_210002="$(psql_q "SELECT COUNT(*) FROM gl_account_organization WHERE organization_party_id = 'Company' AND gl_account_id = '210002';" 2>/dev/null || echo "0")"
 if [[ "$HAS_210002" == "0" || "$ORG_210002" == "0" ]]; then
   echo ">>> Loading HMS COA (HmsCoaSeedData.xml, includes 210002 + Company org links)..."
-  ofbiz_load "file=component://hms/data/HmsCoaSeedData.xml"
+  ofbiz_load "$OFBIZ_HMS_COA"
   HAS_210002="$(psql_q "SELECT COUNT(*) FROM gl_account WHERE gl_account_id = '210002';")"
   ORG_210002="$(psql_q "SELECT COUNT(*) FROM gl_account_organization WHERE organization_party_id = 'Company' AND gl_account_id = '210002';")"
   echo "After HMS COA: gl_account 210002=$HAS_210002 | org link Company/210002=$ORG_210002"

@@ -20,5 +20,17 @@ docker_compose() {
 }
 
 hms_api_container_up() {
-  docker_compose ps hms-api 2>/dev/null | grep -qE '(Up|running)'
+  if docker_compose ps hms-api 2>/dev/null | grep -qE '(Up|running)'; then
+    return 0
+  fi
+  # Stack often started with sudo while this script auto-picked plain `docker compose`.
+  if [[ "${DOCKER_COMPOSE_BIN:-}" != "sudo docker compose" ]] && command -v sudo >/dev/null 2>&1; then
+    if sudo docker compose ps hms-api 2>/dev/null | grep -qE '(Up|running)'; then
+      echo "Note: using 'sudo docker compose' (hms-api visible only to root compose)." >&2
+      DOCKER_COMPOSE_BIN="sudo docker compose"
+      export DOCKER_COMPOSE_BIN
+      return 0
+    fi
+  fi
+  return 1
 }
