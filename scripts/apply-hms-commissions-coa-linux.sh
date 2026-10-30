@@ -31,8 +31,14 @@ if [[ -f .env ]]; then
 fi
 
 DB_NAME="${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}"
-PGHOST="${OFBIZ_POSTGRES_HOST:-${DB_HOST:-localhost}}"
-PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
+API_JDBC_HOST="${OFBIZ_POSTGRES_HOST:-${DB_HOST:-localhost}}"
+if [[ "$API_JDBC_HOST" == "host.docker.internal" ]]; then
+  PGHOST="${NATIVE_POSTGRES_HOST:-localhost}"
+  PGPORT="${NATIVE_POSTGRES_PORT:-${DB_PORT:-5432}}"
+else
+  PGHOST="$API_JDBC_HOST"
+  PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
+fi
 PGUSER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 
 ofbiz_load() {
@@ -46,10 +52,9 @@ psql_q() {
 }
 
 echo "=== HMS commissions / COA fix ==="
-echo "Database (must match running API): $DB_NAME @ $PGHOST:$PGPORT"
-if [[ -n "${NATIVE_POSTGRES_HOST:-}" && "${NATIVE_POSTGRES_HOST}" != "$PGHOST" ]]; then
-  echo "WARN: NATIVE_POSTGRES_HOST=${NATIVE_POSTGRES_HOST} differs from API host $PGHOST."
-  echo "      Run psql/pgAdmin against $PGHOST, not only localhost, unless they are the same server."
+echo "Database: $DB_NAME | API JDBC host: $API_JDBC_HOST | host psql: $PGHOST:$PGPORT"
+if [[ "$API_JDBC_HOST" == "host.docker.internal" && "${NATIVE_POSTGRES_HOST:-localhost}" != "localhost" ]]; then
+  echo "NOTE: Container reaches Postgres via host-gateway; host psql uses NATIVE_POSTGRES_HOST=$PGHOST."
 fi
 echo "Container: $(docker compose ps -q hms-api 2>/dev/null || echo 'hms-api not running')"
 

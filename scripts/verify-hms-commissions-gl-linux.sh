@@ -16,18 +16,26 @@ fi
 
 DB_NAME="${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}"
 API_PGHOST="${OFBIZ_POSTGRES_HOST:-${DB_HOST:-localhost}}"
-PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
 NATIVE_PGHOST="${NATIVE_POSTGRES_HOST:-localhost}"
 NATIVE_PGPORT="${NATIVE_POSTGRES_PORT:-5432}"
+if [[ "$API_PGHOST" == "host.docker.internal" ]]; then
+  HOST_PGHOST="$NATIVE_PGHOST"
+  HOST_PGPORT="$NATIVE_PGPORT"
+else
+  HOST_PGHOST="$API_PGHOST"
+  HOST_PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
+fi
+PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
 APP_USER="${OFBIZ_POSTGRES_OFBIZ_USER:-${DB_USER:-hms_app}}"
 APP_PASS="${OFBIZ_POSTGRES_OFBIZ_PASSWORD:-${DB_PASSWORD:-}}"
 ADMIN_USER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 ADMIN_PASS="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}"
 
 echo "=== COMMISSIONS_PAYABLE diagnostics ==="
-echo "API target (from .env): $DB_NAME @ $API_PGHOST:$PGPORT (user: $APP_USER)"
-if [[ "$NATIVE_PGHOST" != "$API_PGHOST" || "$NATIVE_PGPORT" != "$PGPORT" ]]; then
-  echo "NOTE: NATIVE postgres is $NATIVE_PGHOST:$NATIVE_PGPORT — pgAdmin on localhost is NOT the same host as the API unless both point to one server."
+echo "API JDBC: $DB_NAME @ $API_PGHOST:$PGPORT (user: $APP_USER)"
+echo "Host psql: $DB_NAME @ $HOST_PGHOST:$HOST_PGPORT (same DB when API uses host.docker.internal)"
+if [[ "$API_PGHOST" != "host.docker.internal" && "$NATIVE_PGHOST" != "$API_PGHOST" ]]; then
+  echo "NOTE: NATIVE postgres is $NATIVE_PGHOST — may differ from API host $API_PGHOST."
 fi
 
 run_psql_at() {
@@ -37,7 +45,7 @@ run_psql_at() {
 }
 
 run_psql() {
-  run_psql_at "$API_PGHOST" "$PGPORT" "$1" "$2" "${@:3}"
+  run_psql_at "$HOST_PGHOST" "$HOST_PGPORT" "$1" "$2" "${@:3}"
 }
 
 echo ""
