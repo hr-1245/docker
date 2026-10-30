@@ -31,8 +31,8 @@ if [[ -f .env ]]; then
 fi
 
 DB_NAME="${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}"
-PGHOST="${DB_HOST:-localhost}"
-PGPORT="${DB_PORT:-5432}"
+PGHOST="${OFBIZ_POSTGRES_HOST:-${DB_HOST:-localhost}}"
+PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
 PGUSER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 
 ofbiz_load() {
@@ -46,7 +46,11 @@ psql_q() {
 }
 
 echo "=== HMS commissions / COA fix ==="
-echo "Database: $DB_NAME @ $PGHOST:$PGPORT"
+echo "Database (must match running API): $DB_NAME @ $PGHOST:$PGPORT"
+if [[ -n "${NATIVE_POSTGRES_HOST:-}" && "${NATIVE_POSTGRES_HOST}" != "$PGHOST" ]]; then
+  echo "WARN: NATIVE_POSTGRES_HOST=${NATIVE_POSTGRES_HOST} differs from API host $PGHOST."
+  echo "      Run psql/pgAdmin against $PGHOST, not only localhost, unless they are the same server."
+fi
 echo "Container: $(docker compose ps -q hms-api 2>/dev/null || echo 'hms-api not running')"
 
 if ! docker compose ps hms-api 2>/dev/null | grep -q 'Up'; then

@@ -15,19 +15,29 @@ if [[ -f .env ]]; then
 fi
 
 DB_NAME="${OFBIZ_POSTGRES_OFBIZ_DB:-${DB_NAME:-ofbiz_hms}}"
-PGHOST="${DB_HOST:-localhost}"
-PGPORT="${DB_PORT:-5432}"
+API_PGHOST="${OFBIZ_POSTGRES_HOST:-${DB_HOST:-localhost}}"
+PGPORT="${OFBIZ_POSTGRES_PORT:-${DB_PORT:-5432}}"
+NATIVE_PGHOST="${NATIVE_POSTGRES_HOST:-localhost}"
+NATIVE_PGPORT="${NATIVE_POSTGRES_PORT:-5432}"
 APP_USER="${OFBIZ_POSTGRES_OFBIZ_USER:-${DB_USER:-hms_app}}"
 APP_PASS="${OFBIZ_POSTGRES_OFBIZ_PASSWORD:-${DB_PASSWORD:-}}"
 ADMIN_USER="${POSTGRES_ADMIN_USER:-${NATIVE_POSTGRES_ADMIN_USER:-postgres}}"
 ADMIN_PASS="${POSTGRES_ADMIN_PASSWORD:-${NATIVE_POSTGRES_ADMIN_PASSWORD:-}}"
 
 echo "=== COMMISSIONS_PAYABLE diagnostics ==="
-echo "DB: $DB_NAME @ $PGHOST:$PGPORT (API user: $APP_USER)"
+echo "API target (from .env): $DB_NAME @ $API_PGHOST:$PGPORT (user: $APP_USER)"
+if [[ "$NATIVE_PGHOST" != "$API_PGHOST" || "$NATIVE_PGPORT" != "$PGPORT" ]]; then
+  echo "NOTE: NATIVE postgres is $NATIVE_PGHOST:$NATIVE_PGPORT — pgAdmin on localhost is NOT the same host as the API unless both point to one server."
+fi
+
+run_psql_at() {
+  local host="$1" port="$2" user="$3" pass="$4"
+  shift 4
+  PGPASSWORD="$pass" psql -h "$host" -p "$port" -U "$user" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"
+}
 
 run_psql() {
-  local user="$1" pass="$2"
-  PGPASSWORD="$pass" psql -h "$PGHOST" -p "$PGPORT" -U "$user" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"
+  run_psql_at "$API_PGHOST" "$PGPORT" "$1" "$2" "${@:3}"
 }
 
 echo ""
@@ -65,24 +75,60 @@ else
 fi
 
 echo ""
-echo "--- 3) Deployed API includes GL resolver fix? ---"
+echo "--- 3) JDBC database the running container actually uses ---"
 if docker compose ps hms-api 2>/dev/null | grep -q 'Up'; then
-  if docker compose exec -T hms-api sh -c 'find /ofbiz -name "*.jar" 2>/dev/null | while read j; do jar tf "$j" 2>/dev/null | grep -q "org/apache/ofbiz/hms/module/HmsAccountingBridge.class" && echo "FOUND HmsAccountingBridge in: $j"; done' | head -3; then
-    :
-  else
-    echo "Could not locate HmsAccountingBridge.class in jars (layout may differ)."
-  fi
-  if docker compose exec -T hms-api sh -c 'grep -r "resolveCommissionsPayableGlAccountId" /ofbiz/applications/hms 2>/dev/null | head -1 || find /ofbiz -name "*.jar" -print0 2>/dev/null | xargs -0 -I{} sh -c "strings {} 2>/dev/null | grep -q resolveCommissionsPayableGlAccountId && echo FOUND_IN {}"' 2>/dev/null | head -5; then
-    echo "If no FOUND line above, image is likely OLD (master without commission GL fallback)."
-    echo "Fix: git pull fix/opd-encounter-sequence-and-commission-accounting in hms-api, then:"
+  docker compose exec -T hms-api sh -c '
+    for f in /ofbiz/config/entityengine.xml /ofbiz/framework/entity/config/entityengine.xml; do
+      if [ -f "$f" ]; then
+        echo "entityengine: $f"
+        grep -E "jdbc-uri|jdbc-uri" "$f" 2>/dev/null | head -3 || grep "jdbc:postgresql" "$f" | head -3
+      fi
+    done
+    echo "OFBIZ_POSTGRES_OFBIZ_DB=${OFBIZ_POSTGRES_OFBIZ_DB:-<unset>}"
+    echo "DB_NAME=${DB_NAME:-<unset>}"
+  ' 2>/dev/null || echo "Could not read entityengine inside container."
+else
+  echo "hms-api container not running."
+fi
+
+echo ""
+echo "--- 4) Deployed API includes GL resolver fix? ---"
+if docker compose ps hms-api 2>/dev/null | grep -q 'Up'; then
+  RESOLVER_FOUND="$(docker compose exec -T hms-api sh -c '
+    if grep -rq "resolveCommissionsPayableGlAccountId" /ofbiz/applications/hms 2>/dev/null; then
+      echo YES_SOURCE
+      exit 0
+    fi
+    for j in $(find /ofbiz -name "*.jar" 2>/dev/null); do
+      if strings "$j" 2>/dev/null | grep -q "resolveCommissionsPayableGlAccountId"; then
+        echo "YES_JAR:$j"
+        exit 0
+      fi
+    done
+    echo NO
+  ' 2>/dev/null | head -1 || echo NO)"
+  echo "resolveCommissionsPayableGlAccountId in image: $RESOLVER_FOUND"
+  if [[ "$RESOLVER_FOUND" == NO ]]; then
+    echo "Image is likely OLD (master without commission GL fallback)."
+    echo "Fix: git checkout fix/opd-encounter-sequence-and-commission-accounting, then:"
     echo "     docker compose build --no-cache hms-api && docker compose up -d hms-api"
   fi
 else
   echo "hms-api container not running."
 fi
 
+if [[ "$NATIVE_PGHOST" != "$API_PGHOST" ]] && [[ -n "$ADMIN_PASS" ]]; then
+  echo ""
+  echo "--- 5) Same checks on NATIVE host ($NATIVE_PGHOST) — often where pgAdmin connects ---"
+  run_psql_at "$NATIVE_PGHOST" "$NATIVE_PGPORT" "$ADMIN_USER" "$ADMIN_PASS" <<'SQL' || true
+SELECT current_database() AS db, inet_server_addr() AS server_ip, COUNT(*) AS gl_account_total FROM gl_account;
+SQL
+  echo "If gl_account_total differs from step 1, you patched the wrong PostgreSQL instance."
+fi
+
 echo ""
-echo "--- 4) If Step A–C are empty, run apply script ---"
+echo "--- 6) If Step A–C are empty OR gl_account_total=0, run apply script on API host ---"
 echo "    ./scripts/apply-hms-commissions-coa-linux.sh"
+echo "    (Manual INSERT into gl_account_type_default alone does nothing when gl_account is empty.)"
 echo ""
-echo "--- 5) If DB OK but UI still fails: rebuild API from fix branch (see step 3) ---"
+echo "--- 7) If DB OK on API host but UI still fails: rebuild API from fix branch (step 4) ---"
