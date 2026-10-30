@@ -20,6 +20,7 @@ COMPOSE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/.." && pwd)"
 MIGRATION_SQL="$REPO_ROOT/hms-api/applications/hms/data/migrations/20261029-hms-commissions-payable-type-default.sql"
 HOTFIX_SQL="$COMPOSE_DIR/postgres/external/hms-commissions-payable-hotfix.sql"
+ACCT_MIN_SQL="$COMPOSE_DIR/postgres/external/hms-accounting-demo-minimum-hotfix.sql"
 # --load-data file= must be a path UtilURL can resolve (not component://).
 OFBIZ_DEMO_GL="file=/ofbiz/applications/datamodel/data/demo/GlAccountDemoData.xml"
 OFBIZ_HMS_COA="file=/ofbiz/applications/hms/data/HmsCoaSeedData.xml"
@@ -124,10 +125,15 @@ if [[ -f "$MIGRATION_SQL" ]]; then
 elif [[ -f "$HOTFIX_SQL" ]]; then
   SQL_FILE="$HOTFIX_SQL"
 fi
+if [[ -f "$ACCT_MIN_SQL" ]]; then
+  echo ">>> Applying minimum accounting defaults (invoice posting / CASH / fiscal period)..."
+  psql_admin -f "$ACCT_MIN_SQL"
+fi
+
 if [[ -z "$SQL_FILE" ]]; then
   echo "WARN: no commissions SQL found — skip SQL step" >&2
 else
-  echo ">>> Applying gl_account_type_default ($SQL_FILE)..."
+  echo ">>> Applying COMMISSIONS_PAYABLE gl_account_type_default ($SQL_FILE)..."
   psql_admin -f "$SQL_FILE"
 fi
 
