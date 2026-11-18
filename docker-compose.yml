@@ -37,6 +37,11 @@ services:
       OFBIZ_HOST_HEADERS_ALLOWED: ${OFBIZ_HOST_HEADERS_ALLOWED:-}
       SUBSCRIPTION_DAYS: ${SUBSCRIPTION_DAYS:-0}
       SUBSCRIPTION_START_DATE: ${SUBSCRIPTION_START_DATE:-}
+      # Persist HR docs / licenses / doctor photos on the runtime volume (ofbiz user can write here).
+      # Default /data/hms-files is not mounted and is not writable by the ofbiz user in this image.
+      HMS_FILE_STORAGE_ROOT: ${HMS_FILE_STORAGE_ROOT:-/ofbiz/runtime/hms-files}
+      HMS_FILE_DOWNLOAD_SECRET: ${HMS_FILE_DOWNLOAD_SECRET:-}
+      HMS_STAFF_PROFILE_PHOTO_MAX_BYTES: ${HMS_STAFF_PROFILE_PHOTO_MAX_BYTES:-2097152}
     volumes:
       - hms_api_runtime:/ofbiz/runtime
     ports:
