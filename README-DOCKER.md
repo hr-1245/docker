@@ -186,23 +186,37 @@ HMS_SMTP_STARTTLS=false
 
 
 
-## Host nginx 413 (profile photo upload)
+## Edge nginx-proxy 413 / 504
 
 
 
-`hms-web` already allows 32m. If the browser shows `413` from `nginx/… (Ubuntu)`, raise the **host** reverse-proxy limit (see `host-nginx-portal.snippet.conf`):
+On SAFI-HOSPITAL-CMS, TLS terminates in the Docker container **`nginx-proxy`** (systemd `nginx.service` is not used). `hms-web` already allows 32m; the edge proxy still needs:
 
 
 
-```nginx
+```bash
 
-client_max_body_size 32m;
+docker cp nginx-proxy/portal-extra.conf nginx-proxy:/etc/nginx/conf.d/portal-extra.conf
+
+docker exec nginx-proxy nginx -t && docker exec nginx-proxy nginx -s reload
 
 ```
 
 
 
-Then `sudo nginx -t && sudo systemctl reload nginx`.
+That sets `client_max_body_size 32m` (fixes photo **413**) and longer `proxy_read_timeout` (avoids **504** while the API waits on SMTP). Rebuild API after mail timeout changes:
+
+
+
+```bash
+
+docker compose up -d --build --force-recreate hms-api
+
+docker exec docker-hms-api-1 printenv | grep HMS_MAIL
+
+docker exec docker-hms-api-1 printenv | grep HMS_SMTP
+
+```
 
 
 
