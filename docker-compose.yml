@@ -42,6 +42,16 @@ services:
       HMS_FILE_STORAGE_ROOT: ${HMS_FILE_STORAGE_ROOT:-/ofbiz/runtime/hms-files}
       HMS_FILE_DOWNLOAD_SECRET: ${HMS_FILE_DOWNLOAD_SECRET:-}
       HMS_STAFF_PROFILE_PHOTO_MAX_BYTES: ${HMS_STAFF_PROFILE_PHOTO_MAX_BYTES:-2097152}
+      # Doctor / HR credential email and appointment notifications (must be listed to reach the container)
+      HMS_WEB_LOGIN_URL: ${HMS_WEB_LOGIN_URL:-}
+      HMS_MAIL_FROM: ${HMS_MAIL_FROM:-}
+      HMS_MAIL_ENABLED: ${HMS_MAIL_ENABLED:-N}
+      HMS_SMTP_HOST: ${HMS_SMTP_HOST:-}
+      HMS_SMTP_PORT: ${HMS_SMTP_PORT:-465}
+      HMS_SMTP_USER: ${HMS_SMTP_USER:-}
+      HMS_SMTP_PASSWORD: ${HMS_SMTP_PASSWORD:-}
+      # Port 465 = implicit SSL (set false). Port 587 = STARTTLS (set true).
+      HMS_SMTP_STARTTLS: ${HMS_SMTP_STARTTLS:-false}
     volumes:
       - hms_api_runtime:/ofbiz/runtime
     ports:

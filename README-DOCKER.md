@@ -148,6 +148,64 @@ See `hms-api/.env.example` — `SUBSCRIPTION_DAYS`, `SUBSCRIPTION_START_DATE`. T
 
 
 
+## Mail / SMTP (doctor credential emails)
+
+
+
+Compose only injects variables listed under `hms-api.environment`. Set these in `docker/.env` (cPanel SSL/TLS example):
+
+
+
+```bash
+
+HMS_WEB_LOGIN_URL=https://portal.example.com
+
+HMS_MAIL_FROM=info@example.com
+
+HMS_MAIL_ENABLED=Y
+
+HMS_SMTP_HOST=mail.example.com
+
+HMS_SMTP_PORT=465
+
+HMS_SMTP_USER=info@example.com
+
+HMS_SMTP_PASSWORD=your_mailbox_password
+
+HMS_SMTP_STARTTLS=false
+
+```
+
+
+
+- Port **465** = implicit SSL (`HMS_SMTP_STARTTLS=false`). Port **587** = STARTTLS (`true`).
+
+- `HMS_MAIL_FROM` should match the mailbox (`HMS_SMTP_USER`), or the provider may reject the message.
+
+- After changing mail env: `docker compose up -d --force-recreate hms-api`
+
+
+
+## Host nginx 413 (profile photo upload)
+
+
+
+`hms-web` already allows 32m. If the browser shows `413` from `nginx/… (Ubuntu)`, raise the **host** reverse-proxy limit (see `host-nginx-portal.snippet.conf`):
+
+
+
+```nginx
+
+client_max_body_size 32m;
+
+```
+
+
+
+Then `sudo nginx -t && sudo systemctl reload nginx`.
+
+
+
 ## Environment reference
 
 
@@ -155,4 +213,6 @@ See `hms-api/.env.example` — `SUBSCRIPTION_DAYS`, `SUBSCRIPTION_START_DATE`. T
 - `docker/.env.example` — Docker stack + external DB
 
 - `hms-api/.env.example` — OFBiz/HMS when running API outside Docker
+
+- `docker/host-nginx-portal.snippet.conf` — host TLS nginx body size for uploads
 
