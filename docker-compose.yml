@@ -45,7 +45,8 @@ services:
       # Doctor / HR credential email and appointment notifications (must be listed to reach the container)
       HMS_WEB_LOGIN_URL: ${HMS_WEB_LOGIN_URL:-}
       HMS_MAIL_FROM: ${HMS_MAIL_FROM:-}
-      HMS_MAIL_ENABLED: ${HMS_MAIL_ENABLED:-N}
+      # Empty default: do not force N into the container (that blocked mail when only SMTP_* was set).
+      HMS_MAIL_ENABLED: ${HMS_MAIL_ENABLED:-}
       HMS_SMTP_HOST: ${HMS_SMTP_HOST:-}
       HMS_SMTP_PORT: ${HMS_SMTP_PORT:-465}
       HMS_SMTP_USER: ${HMS_SMTP_USER:-}
