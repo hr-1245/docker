@@ -53,6 +53,8 @@ services:
       HMS_SMTP_PASSWORD: ${HMS_SMTP_PASSWORD:-}
       # Port 465 = implicit SSL (set false). Port 587 = STARTTLS (set true).
       HMS_SMTP_STARTTLS: ${HMS_SMTP_STARTTLS:-false}
+      # Public website Contact Us inbox (defaults to info@safihospital.com.pk in code/properties)
+      HMS_CONTACT_TO: ${HMS_CONTACT_TO:-info@safihospital.com.pk}
     volumes:
       - hms_api_runtime:/ofbiz/runtime
     ports:
